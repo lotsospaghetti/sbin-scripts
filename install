@@ -1,0 +1,5 @@
+#!/bin/sh
+# Copies all scripts in repository to /usr/local/sbin directory on running machine
+# author: charel
+
+install -o 0 -g 0 -m 744 --compare --directory "./src" "/usr/local/sbin"

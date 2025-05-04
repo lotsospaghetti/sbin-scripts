@@ -1,0 +1,44 @@
+#!/bin/sh
+# Generate a repoducible MAC address based on hashed concatenation of host's FQDN and a target interface,
+# and add a configuration line for it under /etc/network/interfaces.d/local-hwaddress
+#
+# script author: charel
+# hashed address generaton author: womble
+# source for hashed address generation: https://serverfault.com/a/299563
+
+if [ "$1" = "" ] || [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+  echo "usage: gen-hwaddress INTERFACE"
+  exit 0
+fi
+
+iface_match=$(ls -1 /sys/class/net | grep --word-regexp --regexp="$1")
+if [ "$iface_match" != "" ] && [ "$1" != "lo" ]; then
+
+  config_file=/etc/network/interfaces.d/local-hwaddress
+  config_exists=$(ls "$config_file")
+  if [ "$config_exists" = "" ]; then
+    printf "%s\n%s\n\n" \
+      "# Locally assigned MAC addresses" \
+      "# Generated using gen-hwaddress script" \
+      | tee "$config_file" >/dev/null
+    echo "$config_file created"
+  fi
+
+  mac_addr=$(echo "$FQDN/$1" | md5sum | sed "s/^\(..\)\(..\)\(..\)\(..\)\(..\).*$/02:\1:\2:\3:\4:\5/")
+  config_line=$(echo "hwaddress $1 $mac_addr")
+  config_has_line=$(cat "$config_file" | grep --word-regexp --regexp="$config_line")
+  if [ "$config_has_line" = "" ]; then
+    echo "$config_line" | tee -a "$config_file"
+    echo "restarting networking service..."
+    systemctl restart networking > /dev/null
+    exit 0
+  else
+    echo "configuration for interface $1 is already present in $config_file, nothing to do"
+    exit 1
+  fi
+
+else
+  echo "provided input doesn't match any existing (non-loopback) interfaces found in /sys/class/net:"
+  ls /sys/class/net | grep --word-regexp --invert-match --regexp="lo" | column
+  exit 1
+fi
